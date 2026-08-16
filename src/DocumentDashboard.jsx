@@ -45,10 +45,57 @@ function useCountdown(expiryIso) {
   return { days, hours, minutes, past };
 }
 
-function DocumentCard({ doc, onRenew, onDelete }) {
+function DocumentCard({ doc, onRenew, onDelete, onUpdate }) {
   const status = statusOf(doc.expiry_date);
   const meta = STATUS_META[status];
   const { days, hours, minutes, past } = useCountdown(doc.expiry_date);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    title: doc.title,
+    document_number: doc.document_number || "",
+    expiry_date: doc.expiry_date,
+  });
+
+  function saveEdit() {
+    onUpdate(doc.id, form);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="doc-card" style={{ background: meta.paper, borderColor: meta.rule }}>
+        <div className="doc-card__rule" style={{ background: meta.rule }} />
+        <span className="doc-card__type">{DOC_TYPE_LABELS[doc.doc_type] || "Document"}</span>
+        <input
+          value={form.title}
+          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+          style={{ display: "block", width: "100%", margin: "0.5rem 0", padding: 6 }}
+        />
+        <input
+          value={form.document_number}
+          onChange={(e) => setForm((f) => ({ ...f, document_number: e.target.value }))}
+          placeholder="Document number"
+          style={{ display: "block", width: "100%", marginBottom: 6, padding: 6 }}
+        />
+        <input
+          type="date"
+          value={form.expiry_date}
+          onChange={(e) => setForm((f) => ({ ...f, expiry_date: e.target.value }))}
+          style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }}
+        />
+        <button className="doc-card__action" style={{ borderColor: meta.rule, color: meta.ink }} onClick={saveEdit}>
+          Save
+        </button>
+        <button
+          className="doc-card__action"
+          style={{ borderColor: "#999", color: "#555", marginLeft: "0.5rem" }}
+          onClick={() => setEditing(false)}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="doc-card" style={{ background: meta.paper, borderColor: meta.rule }}>
@@ -79,6 +126,13 @@ function DocumentCard({ doc, onRenew, onDelete }) {
       )}
       <button
         className="doc-card__action"
+        style={{ borderColor: "#3f8a94", color: "#1f4a52", marginLeft: "0.5rem" }}
+        onClick={() => setEditing(true)}
+      >
+        Edit
+      </button>
+      <button
+        className="doc-card__action"
         style={{ borderColor: "#999", color: "#555", marginLeft: "0.5rem" }}
         onClick={() => onDelete(doc.id)}
       >
@@ -87,7 +141,6 @@ function DocumentCard({ doc, onRenew, onDelete }) {
     </div>
   );
 }
-
 function CountdownUnit({ value, label }) {
   return (
     <div className="doc-card__unit">
@@ -165,6 +218,22 @@ export default function DocumentDashboard({ token, refreshToken, onAuthChange })
       alert("Could not delete — please try again.");
     }
   }
+  async function handleUpdate(id, updates) {
+  const res = await fetch(`${API_BASE}/api/documents/${id}/`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(updates),
+  });
+  if (res.ok) {
+    const updated = await res.json();
+    setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)));
+  } else {
+    alert("Could not update — please try again.");
+  }
+}
 
   const order = ["expired", "due_soon", "upcoming", "ok"];
 
@@ -193,7 +262,7 @@ export default function DocumentDashboard({ token, refreshToken, onAuthChange })
               </h2>
               <div className="registry__grid">
                 {grouped[status].map((doc) => (
-                  <DocumentCard key={doc.id} doc={doc} onRenew={handleRenew} onDelete={handleDelete} />
+                  <DocumentCard key={doc.id} doc={doc} onRenew={handleRenew} onDelete={handleDelete} onUpdate={handleUpdate} />
                 ))}
               </div>
             </section>
