@@ -1,19 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import NewDocumentForm from "./NewDocumentForm";
 
-const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzg2ODcxMjQwLCJpYXQiOjE3ODY4NzA5NDAsImp0aSI6IjFhNzExM2I2NjE3YTQ4NDBhYjkwNjA3ODkwNTQ1YzA3IiwidXNlcl9pZCI6IjEifQ.cUYLRPjjC2MAZ6xTgxle6E2XfZvS8zhgpab9sYq7GMQ"; // Replace
-
-/**
- * Paperwork Registry — expiry countdown dashboard.
- *
- * Swap `MOCK_DOCUMENTS` + the two fetch stubs below for real calls to your
- * Django REST Framework API:
- *   GET  /api/documents/           -> list
- *   POST /api/documents/           -> create
- *   POST /api/documents/:id/mark_renewed/
- *
- * Everything else (countdown math, grouping, styling) works as-is.
- */
+const API_BASE = "https://paperwork-backend.onrender.com";
 
 const DOC_TYPE_LABELS = {
   RC_BOOK: "RC Book",
@@ -25,20 +13,6 @@ const DOC_TYPE_LABELS = {
   DRIVING_LICENSE: "Driving License",
   OTHER: "Other",
 };
-
-const MOCK_DOCUMENTS = [
-  { id: "1", title: "Insurance — Honda City", doc_type: "INSURANCE", document_number: "POL-88213", expiry_date: addDays(2) },
-  { id: "2", title: "PUC Certificate", doc_type: "PUC", document_number: "PUC-4471", expiry_date: addDays(-3) },
-  { id: "3", title: "RC Book Renewal", doc_type: "RC_BOOK", document_number: "RC-KA05-1234", expiry_date: addDays(21) },
-  { id: "4", title: "Commercial Permit", doc_type: "PERMIT", document_number: "PMT-9012", expiry_date: addDays(58) },
-  { id: "5", title: "Road Tax", doc_type: "ROAD_TAX", document_number: "RT-2211", expiry_date: addDays(190) },
-];
-
-function addDays(n) {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return d.toISOString();
-}
 
 function statusOf(expiryIso) {
   const ms = new Date(expiryIso).getTime() - Date.now();
@@ -59,7 +33,7 @@ const STATUS_META = {
 function useCountdown(expiryIso) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000 * 30); // tick every 30s, enough for a days/hrs/min display
+    const id = setInterval(() => setNow(Date.now()), 1000 * 30);
     return () => clearInterval(id);
   }, []);
   const diff = new Date(expiryIso).getTime() - now;
@@ -103,7 +77,11 @@ function DocumentCard({ doc, onRenew, onDelete }) {
           Mark renewed
         </button>
       )}
-      <button className="doc-card__action" style={{ borderColor: meta.rule, color: meta.ink }} onClick={() => onDelete(doc.id)}>
+      <button
+        className="doc-card__action"
+        style={{ borderColor: "#999", color: "#555", marginLeft: "0.5rem" }}
+        onClick={() => onDelete(doc.id)}
+      >
         Delete
       </button>
     </div>
@@ -119,15 +97,12 @@ function CountdownUnit({ value, label }) {
   );
 }
 
-
-
-// ... (keep DOC_TYPE_LABELS, MOCK_DOCUMENTS, addDays, statusOf, STATUS_META, useCountdown, DocumentCard, CountdownUnit exactly as they already are) ...
-
 export default function DocumentDashboard({ token, refreshToken, onAuthChange }) {
   const [documents, setDocuments] = useState([]);
+  const [loadError, setLoadError] = useState("");
 
   async function refreshAccessToken() {
-    const res = await fetch("http://127.0.0.1:8000/api/token/refresh/", {
+    const res = await fetch(`${API_BASE}/api/token/refresh/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh: refreshToken }),
@@ -140,17 +115,21 @@ export default function DocumentDashboard({ token, refreshToken, onAuthChange })
 
   useEffect(() => {
     async function load() {
-      let res = await fetch("http://127.0.0.1:8000/api/documents/", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.status === 401) {
-        const newToken = await refreshAccessToken();
-        res = await fetch("http://127.0.0.1:8000/api/documents/", {
-          headers: { Authorization: `Bearer ${newToken}` },
+      try {
+        let res = await fetch(`${API_BASE}/api/documents/`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
+        if (res.status === 401) {
+          const newToken = await refreshAccessToken();
+          res = await fetch(`${API_BASE}/api/documents/`, {
+            headers: { Authorization: `Bearer ${newToken}` },
+          });
+        }
+        const data = await res.json();
+        setDocuments(data.results ?? data);
+      } catch (err) {
+        setLoadError("Could not load documents — the server may be waking up, refresh in a moment.");
       }
-      const data = await res.json();
-      setDocuments(data.results ?? data);
     }
     load();
   }, [token]);
@@ -163,21 +142,28 @@ export default function DocumentDashboard({ token, refreshToken, onAuthChange })
       .forEach((d) => buckets[statusOf(d.expiry_date)].push(d));
     return buckets;
   }, [documents]);
-  async function handleDelete(id) {
-  if (!window.confirm("Delete this document permanently?")) return;
-  const res = await fetch(`http://127.0.0.1:8000/api/documents/${id}/`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (res.ok) {
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-  } else {
-    alert("Could not delete — please try again.");
+
+  async function handleRenew(id) {
+    const res = await fetch(`${API_BASE}/api/documents/${id}/mark_renewed/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      setDocuments((prev) => prev.filter((d) => d.id !== id));
+    }
   }
-}
-  function handleRenew(id) {
-    // Real integration: POST /api/documents/:id/mark_renewed/ then refetch.
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
+
+  async function handleDelete(id) {
+    if (!window.confirm("Delete this document permanently?")) return;
+    const res = await fetch(`${API_BASE}/api/documents/${id}/`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      setDocuments((prev) => prev.filter((d) => d.id !== id));
+    } else {
+      alert("Could not delete — please try again.");
+    }
   }
 
   const order = ["expired", "due_soon", "upcoming", "ok"];
@@ -191,8 +177,11 @@ export default function DocumentDashboard({ token, refreshToken, onAuthChange })
         <p className="registry__lede">
           RC books, insurance, PUC and permits — tracked to the day so nothing lapses quietly.
         </p>
-        <NewDocumentForm token={token} onCreated={(doc) => setDocuments((prev) => [...prev, doc])} />
       </header>
+
+      <NewDocumentForm token={token} onCreated={(doc) => setDocuments((prev) => [...prev, doc])} />
+
+      {loadError && <p style={{ textAlign: "center", color: "red" }}>{loadError}</p>}
 
       {order.map(
         (status) =>
@@ -204,9 +193,8 @@ export default function DocumentDashboard({ token, refreshToken, onAuthChange })
               </h2>
               <div className="registry__grid">
                 {grouped[status].map((doc) => (
-                  <DocumentCard key={doc.id} doc={doc} onRenew={handleRenew} onDelete={handleDelete}     />
+                  <DocumentCard key={doc.id} doc={doc} onRenew={handleRenew} onDelete={handleDelete} />
                 ))}
-  
               </div>
             </section>
           )

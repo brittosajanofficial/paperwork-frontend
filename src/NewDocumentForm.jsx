@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 
+const API_BASE = "https://paperwork-backend.onrender.com";
+
 const DOC_TYPES = [
   "RC_BOOK", "INSURANCE", "PUC", "PERMIT",
   "FITNESS", "ROAD_TAX", "DRIVING_LICENSE", "OTHER",
@@ -25,7 +27,7 @@ export default function NewDocumentForm({ token, onCreated }) {
     setError("");
     setSaving(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/documents/", {
+      const res = await fetch(`${API_BASE}/api/documents/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
