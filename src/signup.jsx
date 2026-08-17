@@ -2,8 +2,9 @@ import React, { useState } from "react";
 
 const API_BASE = "https://paperwork-backend.onrender.com";
 
-export default function Login({ onLogin, onGoToSignup }) {
+export default function Signup({ onSignedUp, onBackToLogin }) {
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -13,14 +14,16 @@ export default function Login({ onLogin, onGoToSignup }) {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/token/`, {
+      const res = await fetch(`${API_BASE}/api/register/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, email, password }),
       });
-      if (!res.ok) throw new Error("Invalid username or password");
-      const data = await res.json();
-      onLogin({ access: data.access, refresh: data.refresh });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(Object.values(data).flat().join(" "));
+      }
+      onSignedUp();
     } catch (err) {
       setError(
         err.message === "Failed to fetch"
@@ -34,7 +37,7 @@ export default function Login({ onLogin, onGoToSignup }) {
 
   return (
     <form onSubmit={handleSubmit} style={{ maxWidth: 320, margin: "4rem auto", fontFamily: "sans-serif" }}>
-      <h2>Log in</h2>
+      <h2>Sign up</h2>
       <input
         placeholder="Username"
         value={username}
@@ -42,7 +45,14 @@ export default function Login({ onLogin, onGoToSignup }) {
         style={{ display: "block", width: "100%", marginBottom: 8, padding: 8 }}
       />
       <input
-        placeholder="Password"
+        placeholder="Email"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        style={{ display: "block", width: "100%", marginBottom: 8, padding: 8 }}
+      />
+      <input
+        placeholder="Password (min 8 characters)"
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -50,12 +60,12 @@ export default function Login({ onLogin, onGoToSignup }) {
       />
       {error && <p style={{ color: "red", fontSize: 13 }}>{error}</p>}
       <button type="submit" disabled={loading} style={{ padding: "8px 16px" }}>
-        {loading ? "Logging in..." : "Log in"}
+        {loading ? "Signing up..." : "Sign up"}
       </button>
       <p style={{ fontSize: 13, marginTop: 12 }}>
-        Don't have an account?{" "}
-        <a href="#" onClick={(e) => { e.preventDefault(); onGoToSignup(); }}>
-          Sign Up here
+        Already have an account?{" "}
+        <a href="#" onClick={(e) => { e.preventDefault(); onBackToLogin(); }}>
+          Log in here
         </a>
       </p>
     </form>
